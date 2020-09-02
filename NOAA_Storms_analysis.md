@@ -1,7 +1,7 @@
 Most damaging climate events across the USA
 ================
 Ander Elkoroaristizabal
-9/1/2020
+9/2/2020
 
 ## Abstract
 
@@ -15,6 +15,24 @@ In this analysis we answer the following two questions:
 We will consider the impact of each event type additively, i.e., the
 impact of each event type will be the sum of all the events inside this
 type We leave the option of considering the average damage for later.
+
+## Synopsis
+
+The analysis can be summarized as follows:
+
+1.  We load the data.
+2.  We start with the first question. We see that the data needs no
+    preprocessing.
+3.  We do two barplots, one of injured people and another one of
+    fatalies in order to answer the question.
+4.  We start with the second question. We see that the data needs
+    preprocessing. We process the exponents data, and modify accordingly
+    the damage columns.
+5.  We do two barplots of the property and crop damage by type of event
+    and answer the question.
+6.  We do another barplot, in which the data is the addition of property
+    and crop damage, in order to give more insight about the next events
+    with worst economic consequences.
 
 ## Data processing
 
@@ -85,16 +103,17 @@ library(dplyr)
 hdamage_by_type = group_by(Storm_data, EVTYPE) %>% 
   summarise(INJURIES = sum(INJURIES), FATALITIES = sum(FATALITIES))
 
-worst_events = intersect(hdamage_by_type[order(-hdamage_by_type$INJURIES),][1:5,],
+most_harmful_events = intersect(hdamage_by_type[order(-hdamage_by_type$INJURIES),][1:5,],
                    hdamage_by_type[order(-hdamage_by_type$FATALITIES),][1:5,])
 
-par(mfrow = c(2,1), mai = c(0.5, 0.5, 0.1, 0.1))
-barplot(INJURIES~EVTYPE, 
-        worst_events,
-        xlab = "")
-barplot(FATALITIES~EVTYPE, 
-        worst_events,
-        xlab = "")
+par(mfrow = c(2,1), mai = c(0.5, 1, 0.1, 0.1), oma = c(0,0,1,0))
+barplot(INJURIES/1000~EVTYPE, 
+        most_harmful_events,
+        xlab = "", ylab = "Injuries (K)", ylim = c(0,100))
+title("Human harm by type of event", outer = TRUE)
+barplot(FATALITIES/1000~EVTYPE, 
+        most_harmful_events,
+        xlab = "", ylab = "Fatalities (K)", ylim =c(0,6))
 ```
 
 <img src="NOAA_Storms_analysis_files/figure-gfm/Harmful-1.png" style="display: block; margin: auto;" />
@@ -102,9 +121,13 @@ barplot(FATALITIES~EVTYPE,
 The answer to question one is clear: Tornados are by far the most
 harmful event in the US.
 
-### 2\. Event types with greatest economic consequences
+### 2\. Event type with worst economic consequences
 
-What do the exponents mean? E.g.:
+In order to answer this question we need to focus on the columns PROPDMG
+and CROPDMG, related to property and crops damage, and to their
+exponents, in the PROPDMGEXP and CROPDMGEXP columns. The first thing we
+notice is that the meaning of some values of these exponent columns is
+not clear. The values are of PROPDMGEXP, for example, are the following:
 
 ``` r
 table(Storm_data$PROPDMGEXP)
@@ -115,3 +138,99 @@ table(Storm_data$PROPDMGEXP)
     ## 465934      1      8      5    216     25     13      4      4     28      4 
     ##      7      8      B      h      H      K      m      M 
     ##      5      1     40      1      6 424665      7  11330
+
+Most values are understandable, but the meaning of the - and + sign is
+not clear, and the question mark should be treated as NA’s.
+Nevertheless, since the number of - and + marks is small, we will also
+consider them to be NA’s. Furthermore, we will treat the empty values as
+zeros.
+
+Now we will format the exponent columns using the `translate_exponent()`
+function, and use them to give the same scale to the values in PROPDMG
+and CROPDMG.
+
+``` r
+translate_exponent = function(e){
+  if (e==""){ 
+    return(0) }
+  else if (e %in% c("-","+","?")){
+    return(NA)}
+  else if (suppressWarnings(!is.na(as.numeric(e)))){ # Check whether it is a number
+    return(as.numeric(e))}
+  else if (e == "B"){ 
+    return(9) } # American billions!
+  else if (e %in% c("m","M")){
+    return(6) }
+  else if (e %in% c("k","K")){
+    return(3) }
+  else if (e %in% c("h", "H")){
+    return(2)}
+}
+
+Storm_data$PROPDMGEXP = unlist(sapply(Storm_data$PROPDMGEXP, translate_exponent))
+Storm_data$CROPDMGEXP = unlist(sapply(Storm_data$CROPDMGEXP, translate_exponent))
+Storm_data = transform(Storm_data, PROPDMG = PROPDMG * 10^(PROPDMGEXP),
+                      CROPDMG = CROPDMG * 10^(CROPDMGEXP))
+```
+
+Now that the values of CROPDMG and PROPDMG are coherent, we proceed as
+with question 1 and compare the crop and property damages:
+
+``` r
+edamage_by_type = group_by(Storm_data, EVTYPE) %>% 
+  summarise(PROPDMG = sum(PROPDMG), CROPDMG = sum(CROPDMG))
+
+worst_economic_events = intersect(edamage_by_type[order(-edamage_by_type$PROPDMG),][1:10,],
+                   edamage_by_type[order(-edamage_by_type$CROPDMG),][1:10,])
+
+par(mfrow = c(2,1), mai = c(0.5, 1, 0.25, 0.25), oma = c(0,0,1,0))
+barplot(PROPDMG/10^9~EVTYPE, 
+        worst_economic_events,
+        xlab = "", ylab = "Property damage (B$)")
+title("Economic damage by event and damage type", outer = TRUE)
+barplot(CROPDMG/10^9~EVTYPE, 
+        worst_economic_events,
+        xlab = "", ylab = "Crop damage (B$)")
+```
+
+<img src="NOAA_Storms_analysis_files/figure-gfm/Damage_plots-1.png" style="display: block; margin: auto;" />
+
+From the plots above we can see that the floods are the most damaging
+events in the US, both for property and crop. Nevertheless, notice that
+the maximum economic impact due to property damage is much bigger than
+the maximum economic impact due to crop damage. Hence it is sensible to
+consider it when comparing, and see which event is the most harmful when
+adding the property and crop damage:
+
+``` r
+library(ggplot2)
+Pdamage_by_type = group_by(Storm_data, EVTYPE) %>% 
+  summarise(Damage = sum(PROPDMG))
+Pdamage_by_type["DMG_type"] = "Property"
+Cdamage_by_type = group_by(Storm_data, EVTYPE) %>% 
+  summarise(Damage = sum(CROPDMG))
+Cdamage_by_type["DMG_type"] = "Crop"
+
+# We now take top 3 types of each
+Top_Pdamage_types = Pdamage_by_type[order(-Pdamage_by_type$Damage),]$EVTYPE[1:3]
+Top_Cdamage_types = Cdamage_by_type[order(-Cdamage_by_type$Damage),]$EVTYPE[1:3]
+
+Edamage_by_type = data.frame(row.names = c("EVTYPE","Damage","DMG_type"))
+
+# And bind the data pairs of the events above
+for (type in unique(c(Top_Pdamage_types,Top_Cdamage_types))){
+  Edamage_by_type = rbind(Edamage_by_type, Pdamage_by_type[Pdamage_by_type$EVTYPE == type,])
+  Edamage_by_type = rbind(Edamage_by_type, Cdamage_by_type[Cdamage_by_type$EVTYPE == type,])
+}
+
+ggplot(Edamage_by_type, aes(fill=DMG_type, y=Damage/10^9, x=reorder(EVTYPE,-Damage))) + 
+    geom_bar(position="stack", stat="identity") + 
+    ggtitle("Events with worst economic consequences") + 
+    xlab("") + ylab("Economic damage (B$)") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+<img src="NOAA_Storms_analysis_files/figure-gfm/Sum_damages-1.png" style="display: block; margin: auto;" />
+
+We can see in the plot above that as we already knew, floods are the
+events that do most economic damage. In addition, we now see (without
+any doubt) which are the next 4 most damaging events.
