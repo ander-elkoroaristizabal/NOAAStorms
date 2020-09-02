@@ -1,7 +1,5 @@
 # Readme
 
-## NOAAStorms
-
 In this repository I analyze the NOAA Storms dataset, 
 in order to answer the following two questions: 
 
